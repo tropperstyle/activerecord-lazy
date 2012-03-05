@@ -1,35 +1,22 @@
 require 'active_record'
 
-module ActiveRecord
-  module LazyAssociations
-    def self.extended(base)
-      class << base
-        alias_method_chain :association_accessor_methods, :lazy
-      end
-    end
+module ActiveRecord::Associations::Builder
+  class SingularAssociation
+    self.valid_options += [:lazy]
 
-    def association_accessor_methods_with_lazy(reflection, association_proxy_class)
-      original = association_accessor_methods_without_lazy(reflection, association_proxy_class)
+    private
 
-      if reflection.options[:lazy]
-        constructor = reflection.options[:lazy].to_s
-        raise ActiveRecordError, 'has_one :lazy option must be :build or :create' unless %w[build create].include?(constructor)
-
-        define_method "#{reflection.name}_with_lazy" do
-          send("#{reflection.name}_without_lazy") || send("#{constructor}_#{reflection.name}")
+    def define_readers
+      lazy_constructor = options[:lazy]
+      if lazy_constructor
+        name = self.name
+        mixin.redefine_method(name) do |*params|
+          raise ActiveRecordError, 'has_one :lazy option must be one of :build :create :create!' unless [:build, :create, :create!].include?(lazy_constructor)
+          association(name).reader(*params) || association(name).send(lazy_constructor, *params)
         end
-
-        alias_method_chain reflection.name, :lazy
+      else
+        super
       end
-
-      original
     end
   end
-
-  class Base
-    valid_keys_for_has_one_association << :lazy
-    extend LazyAssociations
-  end
-
 end
-
